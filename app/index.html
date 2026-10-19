@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>User Directory</title>
+<style>
+  :root { --bg:#f4f6fb; --card:#ffffff; --ink:#1f2a44; --muted:#6b778c; --line:#e6e9f2;
+          --accent:#4f6df5; --accent2:#7a5cf0; --danger:#e5484d; --ok:#2f9e6b; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12151f; --card:#1a1f2e; --ink:#e8ecf6; --muted:#98a2b8; --line:#2a3145; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; background:linear-gradient(160deg,var(--bg),#e9edfb 120%);
+         font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); }
+  @media (prefers-color-scheme: dark) { body { background:var(--bg); } }
+  main { max-width:760px; margin:0 auto; padding:48px 20px 60px; }
+  h1 { margin:0; font-size:1.9rem; letter-spacing:-.02em; }
+  .sub { color:var(--muted); margin:6px 0 28px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px;
+          padding:22px; box-shadow:0 8px 30px rgba(31,42,68,.06); margin-bottom:22px; }
+  form { display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end; }
+  label { display:block; font-size:.78rem; color:var(--muted); margin-bottom:5px; }
+  input { width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:10px;
+          background:transparent; color:var(--ink); font-size:.95rem; }
+  input:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  button { cursor:pointer; border:0; border-radius:10px; padding:11px 18px; font-size:.92rem;
+           font-weight:600; color:#fff; background:linear-gradient(135deg,var(--accent),var(--accent2)); }
+  button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); padding:6px 12px; font-weight:500; }
+  button.ghost:hover { color:var(--ink); }
+  button.del:hover { color:var(--danger); border-color:var(--danger); }
+  .row { display:flex; align-items:center; gap:14px; padding:13px 0; border-top:1px solid var(--line); }
+  .row:first-child { border-top:0; }
+  .avatar { width:40px; height:40px; border-radius:50%; display:grid; place-items:center; flex:none;
+            color:#fff; font-weight:700; background:linear-gradient(135deg,var(--accent),var(--accent2)); }
+  .who { flex:1; min-width:0; }
+  .who b { display:block; }
+  .who span { color:var(--muted); font-size:.88rem; overflow-wrap:anywhere; }
+  .head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+  .count { color:var(--muted); font-size:.85rem; }
+  .empty { text-align:center; color:var(--muted); padding:26px 0 8px; }
+  footer { text-align:center; color:var(--muted); font-size:.8rem; margin-top:8px; }
+  #toast { position:fixed; left:50%; bottom:26px; transform:translateX(-50%); background:var(--ink); color:var(--bg);
+           padding:10px 18px; border-radius:999px; font-size:.9rem; opacity:0; transition:opacity .25s; pointer-events:none; }
+  #toast.show { opacity:1; }
+  @media (max-width:620px) { form { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>User Directory</h1>
+  <p class="sub">A small user management service running on Kubernetes.</p>
+
+  <div class="card">
+    <form id="form">
+      <div><label for="name">Name</label><input id="name" required placeholder="Tashi Dorji"></div>
+      <div><label for="email">Email</label><input id="email" type="email" required placeholder="tashi@example.bt"></div>
+      <div><button id="save" type="submit">Add user</button></div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="head"><strong>Users</strong><span class="count" id="count"></span></div>
+    <div id="list"></div>
+  </div>
+
+  <footer>Served by pod <code id="pod">...</code></footer>
+</main>
+<div id="toast"></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let editing = null;
+
+  function toast(msg) {
+    const t = $("toast"); t.textContent = msg; t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2200);
+  }
+  async function call(url, opts) {
+    const r = await fetch(url, opts);
+    if (r.status === 204) return null;
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ("Request failed (" + r.status + ")"));
+    return data;
+  }
+  function initials(n) { return n.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase(); }
+
+  function render(users) {
+    $("count").textContent = users.length + (users.length === 1 ? " user" : " users");
+    const list = $("list"); list.innerHTML = "";
+    if (!users.length) { list.innerHTML = '<div class="empty">No users yet. Add the first one above.</div>'; return; }
+    for (const u of users) {
+      const row = document.createElement("div"); row.className = "row";
+      const av = document.createElement("div"); av.className = "avatar"; av.textContent = initials(u.name);
+      const who = document.createElement("div"); who.className = "who";
+      const b = document.createElement("b"); b.textContent = u.name;
+      const s = document.createElement("span"); s.textContent = u.email;
+      who.append(b, s);
+      const ed = document.createElement("button"); ed.className = "ghost"; ed.textContent = "Edit";
+      ed.onclick = () => { editing = u.id; $("name").value = u.name; $("email").value = u.email;
+                           $("save").textContent = "Save changes"; $("name").focus(); };
+      const de = document.createElement("button"); de.className = "ghost del"; de.textContent = "Delete";
+      de.onclick = async () => { try { await call("/users/" + u.id, { method: "DELETE" }); toast("User deleted"); load(); }
+                                 catch (e) { toast(e.message); } };
+      row.append(av, who, ed, de); list.append(row);
+    }
+  }
+  async function load() {
+    try { render(await call("/users")); } catch (e) { toast(e.message); }
+    try { $("pod").textContent = (await call("/whoami")).pod; } catch (e) {}
+  }
+  $("form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const body = JSON.stringify({ name: $("name").value, email: $("email").value });
+    const opts = { method: editing ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body };
+    try {
+      await call(editing ? "/users/" + editing : "/users", opts);
+      toast(editing ? "User updated" : "User added");
+      editing = null; $("save").textContent = "Add user"; $("form").reset(); load();
+    } catch (e) { toast(e.message); }
+  });
+  load();
+</script>
+</body>
+</html>

@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: usermgmt-api:1.0
+          image: usermgmt-api:1.1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -29,8 +29,10 @@ spec:
               valueFrom: {secretKeyRef: {name: postgres-secret, key: POSTGRES_PASSWORD}}
           livenessProbe:
             httpGet: {path: /healthz, port: 8080}
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
           readinessProbe:
             httpGet: {path: /ready, port: 8080}
             initialDelaySeconds: 5

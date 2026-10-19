@@ -1,9 +1,10 @@
 """Minimal user-management REST API (Flask + PostgreSQL)."""
 import os
+import socket
 
 import psycopg2
 import psycopg2.extras
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 
 app = Flask(__name__)
 _schema_ready = False
@@ -60,6 +61,21 @@ def run(query, params=(), fetch="all"):
 def valid(body):
     return (isinstance(body, dict) and str(body.get("name", "")).strip()
             and str(body.get("email", "")).strip())
+
+
+@app.errorhandler(psycopg2.OperationalError)
+def db_unavailable(exc):
+    return jsonify(error="database unavailable"), 503
+
+
+@app.get("/")                 # simple web page that uses the API below
+def home():
+    return send_from_directory(app.root_path, "index.html")
+
+
+@app.get("/whoami")           # shows which Pod answered (handy for the scaling demo)
+def whoami():
+    return jsonify(pod=socket.gethostname())
 
 
 @app.get("/healthz")          # liveness: process is up, no DB check
